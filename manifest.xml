@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RenoiseScriptingTool doc_version="0">
+  <ApiVersion>3</ApiVersion>
+  <Id>dk.bladre.Marks</Id>
+  <Version>1.03</Version>
+  <Author>aklt [anders AT bladre.dk]</Author>
+  <Name>Marks</Name>
+  <Category>Main Menu</Category>
+  <Description>Save and jump to places in the GUI</Description>
+  <Homepage>http://www.bladre.dk/download</Homepage>
+</RenoiseScriptingTool>
