@@ -107,6 +107,16 @@ function renoiseSelection()
     return array_concat(indexes, selection, trackView)
 end
 
+function renoiseMarkData()
+    local view = renoiseView()
+    local selection = renoiseSelection()
+    local all = array_concat(view, selection)
+    print('all', #all)
+    print('view', #view)
+    print('selection', #selection)
+    return all
+end
+
 function jumpToMark(markName)
     local mark = SongMarks[markName]
     if not mark then
@@ -180,16 +190,6 @@ function jumpToMark(markName)
     saveMarks()
     statusMsg('jump  ' .. markName:upper() .. '  ' .. summarizeMarkContent(mark))
     return mark
-end
-
-function renoiseMarkData()
-    local view = renoiseView()
-    local selection = renoiseSelection()
-    local all = array_concat(view, selection)
-    print('all', #all)
-    print('view', #view)
-    print('selection', #selection)
-    return all
 end
 
 function _iterSeparator(separator, string, amount)
@@ -278,7 +278,6 @@ function readMarksString(marksString)
         table.insert(order, markName)
         line = line:sub(2)
         for i, value in _iterChars(12, line) do
-            --print('value', value, type(value))
             table.insert(markData, value)
         end
         line = line:sub(14)
@@ -330,49 +329,6 @@ function stringifyMarksTable(marksTable, order)
     end
     return result
 end
-
--- {{{1 Observe
-function marksInstrumentIndex()
-    for i, instrument in ripairs(renoise.song().instruments) do
-        if instrument.name == MARKS_INSTRUMENT_NAME then
-            return i
-        end
-    end
-    return nil
-end
-
-function instrumentsChanged()
-    local lastIndex = #renoise.song().instruments
-    local marksIndex = marksInstrumentIndex()
-    if marksIndex and marksIndex ~= lastIndex then
-        renoise.song():swap_instruments_at(marksIndex, lastIndex)
-    end
-end
-
-function addInstrumentsNotifier()
-    local iobs = renoise.song().instruments_observable
-    if not iobs:has_notifier(instrumentsChanged) then
-        iobs:add_notifier(instrumentsChanged)
-    end
-end
-
-function removeInstrumentsNotifier()
-    local iobs = renoise.song().instruments_observable
-    if iobs:has_notifier(instrumentsChanged) then
-        iobs:remove_notifier(instrumentsChanged)
-    end
-end
-
--- setup
-if renoise.tool then
-    renoise.tool().app_new_document_observable:add_notifier(function ()
-        if marksInstrumentIndex() ~= nil then
-            addInstrumentsNotifier()
-        end
-    end)
-end
-
--- 1}}}
 
 function getMarksInstrumentSample()
     for i, instrument in ripairs(renoise.song().instruments) do
@@ -716,13 +672,18 @@ function handleAZ(dialog, views, key)
     if char then
         local byte = char:byte(1)
         if byte >= ('A'):byte(1) and byte <= ('Z'):byte(1) and key.modifiers == 'shift' then
-            addMark(char:lower())
+            local mark = char:lower()
+            addMark(mark)
             saveMarks()
-            marksDialogRedisplay()
+            if preferences.miniwindow.value then
+                REF.dialog:close()
+                showMarksDialog()
+            else
+                updateButtons(REF.vb.views, mark, DefaultMarks[mark], SongMarks[mark])
+            end
             return true
         elseif byte >= ('a'):byte(1) and byte <= ('z'):byte(1) then
             jumpToMark(char)
-            marksDialogRedisplay()
             return true
         end
     end
@@ -841,14 +802,10 @@ function statusMsg(msg)
     renoise.app():show_status('Marks: ' .. msg)
 end
 
-function marksDialogRedisplay()
-    if preferences.miniwindow.value then
-        REF.dialog:close()
-        showMarksDialog()
-    end
-end
-
 function showMarksDialog()
+    if REF.dialog and REF.dialog.visible then
+        REF.dialog:close()
+    end
     loadMarks()
     local vb = renoise.ViewBuilder()
     REF = {['vb'] = vb}
@@ -940,6 +897,46 @@ function showMarksDialog()
         elseif handleRenoiseKey(dialog, REF.vb.views, key) then
         else
             rprint(key)
+        end
+    end)
+end
+
+function marksInstrumentIndex()
+    for i, instrument in ripairs(renoise.song().instruments) do
+        if instrument.name == MARKS_INSTRUMENT_NAME then
+            return i
+        end
+    end
+    return nil
+end
+
+function instrumentsChanged()
+    local lastIndex = #renoise.song().instruments
+    local marksIndex = marksInstrumentIndex()
+    if marksIndex and marksIndex ~= lastIndex then
+        renoise.song():swap_instruments_at(marksIndex, lastIndex)
+    end
+end
+
+function addInstrumentsNotifier()
+    local iobs = renoise.song().instruments_observable
+    if not iobs:has_notifier(instrumentsChanged) then
+        iobs:add_notifier(instrumentsChanged)
+    end
+end
+
+function removeInstrumentsNotifier()
+    local iobs = renoise.song().instruments_observable
+    if iobs:has_notifier(instrumentsChanged) then
+        iobs:remove_notifier(instrumentsChanged)
+    end
+end
+
+-- setup
+if renoise.tool then
+    renoise.tool().app_new_document_observable:add_notifier(function ()
+        if marksInstrumentIndex() ~= nil then
+            addInstrumentsNotifier()
         end
     end)
 end
