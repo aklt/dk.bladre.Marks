@@ -436,13 +436,13 @@ function summarizeMarkContent(markTable)
     local lower = ''
     if markTable[2] == a.MIDDLE_FRAME_PATTERN_EDITOR then
         local song = renoise.song()
-        local sequenceName  = (markTable[19] - 1) .. ''
+        local sequenceName  = markTable[18] .. ''
         local trackName  = markTable[15] .. ''
         if markTable[15] > 0 and markTable[15] <= #song.tracks then
             trackName = song.tracks[markTable[15]].name
         end
-        local patternIdx = song.sequencer.pattern_sequence[markTable[19]]
-        if patternIdx and markTable[17] <= #song.sequencer.pattern_sequence then
+        local patternIdx = song.sequencer.pattern_sequence[markTable[18]]
+        if patternIdx and markTable[18] <= #song.sequencer.pattern_sequence then
             if patternIdx <= #song.patterns then
                 local seqName = song.patterns[patternIdx].name
                 if seqName:gsub("%s+", ""):len() > 0 then
@@ -452,7 +452,7 @@ function summarizeMarkContent(markTable)
         end
         table.insert(result, 'Sequence ' .. sequenceName:match("^%s*(.-)%s*$") .. ', ' ..
                     trackName:match("^%s*(.-)%s*$") ..
-                    ', Line ' .. markTable[20] - 1)
+                    ', Line ' .. markTable[19])
     elseif markTable[2] == a.MIDDLE_FRAME_MIXER then
         local song  = renoise.song()
         local track = song.tracks[markTable[15]]
