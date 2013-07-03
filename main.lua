@@ -1,6 +1,6 @@
 _AUTO_RELOAD_DEBUG = true
 
-local MARKS_VERSION         = '1.04'
+local MARKS_VERSION         = '1.05'
 local MARKS_FORMAT_VERSION  = 'dk.bladre.Marks/v2'
 local MARKS_INSTRUMENT_NAME = '        _______Marks_______'
 
@@ -12,8 +12,8 @@ local preferences = renoise.Document.create("MarksPreferences") {
 }
 
 local OnOffLabels         = {'on', 'off'}
--- TODO Clean code
 -- TODO Load /v1
+-- TODO Better summary
 -- TODO Show mark jumps in minified view
 -- TODO Bug: Jumping is not quite right
 -- TODO If visible, close the dialog with numlock
@@ -21,9 +21,6 @@ local OnOffLabels         = {'on', 'off'}
 -- TODO Numpad + to update current view
 -- TODO Cursor movements, selection
 --
--- Later
--- TODO Defaults
--- TODO Later version: Track collapsed
 local JumpAccuracyLabels  = {'view', 'pattern', 'cursor'}
 local colorDefault        = {200, 200, 220}
 local colorMark           = {200, 220, 200}
@@ -53,8 +50,13 @@ function array_concat(...)
 end
 
 function renoiseView()
+    return REF.vb.views
+end
+
+-- Format: [1-12]:chars [13-29]:commas [30-]:chars
+function renoiseMarkData()
     local window = renoise.app().window
-    return {window.active_lower_frame,                 --   1
+    local view = {window.active_lower_frame,           --   1
             window.active_middle_frame,                --   2
             window.active_upper_frame,                 --   3
             window.disk_browser_is_expanded,           --   4
@@ -66,9 +68,6 @@ function renoiseView()
             window.pattern_matrix_is_visible,          --  10
             window.sample_record_dialog_is_visible,    --  11
             window.upper_frame_is_visible}             --  12
-end
-
-function renoiseSelection()
     local song = renoise.song()
     local track = song.selected_track_index
     local indexes = {
@@ -83,15 +82,15 @@ function renoiseSelection()
         song.selected_note_column_index or 0,          -- 20
         song.selected_effect_column_index or 0         -- 21
     }
-    local selection = {0, 0, 0, 0, 0, 0}                 -- 22, 23, 24, 25, 26, 27
+    local selection = {0, 0, 0, 0, 0, 0}             
     local sa = song.selection_in_pattern
     if sa then
-        selection[1] = sa.end_column
-        selection[2] = sa.end_line
-        selection[3] = sa.end_track
-        selection[4] = sa.start_column
-        selection[5] = sa.start_line
-        selection[6] = sa.start_track
+        selection[1] = sa.end_column                   -- 22 
+        selection[2] = sa.end_line                     -- 23
+        selection[3] = sa.end_track                    -- 24
+        selection[4] = sa.start_column                 -- 25
+        selection[5] = sa.start_line                   -- 26
+        selection[6] = sa.start_track                  -- 27
     end
     local trackView = {
         song.tracks[track].visible_effect_columns,     -- 28
@@ -99,22 +98,15 @@ function renoiseSelection()
         song.tracks[track].volume_column_visible,      -- 30
         song.tracks[track].panning_column_visible,     -- 31
         song.tracks[track].delay_column_visible}       -- 32
-        -- TODO Collapse and track type
-        local collapse = {}
-        for i, v in ipairs(song.tracks) do
-            table.insert(collapse, v)
-        end
-    return array_concat(indexes, selection, trackView)
-end
-
-function renoiseMarkData()
-    local view = renoiseView()
-    local selection = renoiseSelection()
-    local all = array_concat(view, selection)
-    print('all', #all)
-    print('view', #view)
-    print('selection', #selection)
-    return all
+    -- TODO Collapse and track type
+    local collapse = {}
+    local i = 1
+    while i < #song.tracks do
+        local t = song.tracks[i]
+        table.insert(collapse, t.collapsed)
+        i = i + 1
+    end
+    return array_concat(view, indexes, selection, trackView, collapse)
 end
 
 function jumpToMark(markName)
@@ -163,12 +155,6 @@ function jumpToMark(markName)
             local note                           = mark[20]
             local effect                         = mark[21]
             local track = song.tracks[mark[15]]
-            -- TODO Check for support of columns
-            --track.visible_effect_columns = mark[29]
-            --track.visible_note_columns   = mark[30]
-            --track.volume_column_visible  = mark[31]
-            --track.panning_column_visible = mark[32]
-            --track.delay_column_visible   = mark[33]
             if note > 0 then
                 song.selected_note_column_index = note
             end
@@ -185,10 +171,36 @@ function jumpToMark(markName)
                 start_line   = mark[26],
                 start_track  = mark[27]}
         end
+            -- TODO Check for support of columns
+            --track.visible_effect_columns = mark[28]
+            --track.visible_note_columns   = mark[29]
+            --track.volume_column_visible  = mark[30]
+            --track.panning_column_visible = mark[31]
+            --track.delay_column_visible   = mark[32]
+    end
+    if preferences.movecursor.value > 0 then
+        local i = 1
+        local last = math.max(#song.tracks, #mark - 30)
+        while i < last do
+            local t = renoise.song().tracks
+            if t then
+                local value = false
+                if value then
+                    value = not(not(value))
+                end
+                if t[i].type == renoise.Track.TRACK_TYPE_GROUP then
+                    t[i].group_collapsed = value
+                else
+                    t[i].collapsed = value
+                end
+            end
+            i = i + 1
+        end
     end
     updateMarksOrder(markName)
     saveMarks()
     statusMsg('jump  ' .. markName:upper() .. '  ' .. summarizeMarkContent(mark))
+    updateMarksOrder(markName)
     return mark
 end
 
@@ -201,12 +213,12 @@ function _iterSeparator(separator, string, amount)
         if #string > 0 and index < amount then
             local endline = string:find(separator)
             if not endline then
-                endline = #string + 1
-            end
-            local data = string:sub(1, endline - 1)
-            string = string:sub(endline + 1)
-            index = index + 1
-            return index, data
+            endline = #string + 1
+        end
+        local data = string:sub(1, endline - 1)
+        string = string:sub(endline + 1)
+        index = index + 1
+        return index, data
         end
         return nil
     end
@@ -220,7 +232,8 @@ function _iterChars(amount, string)
             local result = string:sub(count, count)
             if #result > 0 then
                 if result:match('^%d$') then
-                    return count, result + 0
+                    result = tonumber(result)
+                    return count, result
                 elseif result == 't' then
                     return count, true
                 elseif result == 'f' then
@@ -273,19 +286,37 @@ function readMarksString(marksString)
     local string = string.sub(marksString, #MARKS_FORMAT_VERSION + 2)
     local count =- 0
     for i, line in _iterSeparator("\n", string) do
+        --print('LINE 1: ' .. line)
         local markData = {}
         local markName = line:sub(1, 1)
         table.insert(order, markName)
         line = line:sub(2)
+        --print('LINE 2: ' .. line)
         for i, value in _iterChars(12, line) do
             table.insert(markData, value)
         end
         line = line:sub(14)
-        for i, value in _iterSeparator(',', line, 12) do
-            table.insert(markData, value + 0)
+        local length = 0
+        --print('LINE 3: ' .. line)
+        for i, value in _iterSeparator(',', line, 17) do
+            table.insert(markData, tonumber(value))
+            if type(value) == type(1) then
+                value = tostring(value)
+            end
+            length = length + value:len() + 1
         end
-        for i, value in _iterChars(3, line:sub(-3)) do
+        line = line:sub(length + 1)
+        local last  = 1
+        --print('LINE 4: ' .. line)
+        for i, value in _iterChars(#renoise.song().tracks, line) do
             table.insert(markData, value)
+            last = last + 1
+        end
+        last = last
+        local copyTo = line:len()
+        while last <= copyTo do
+            table.insert(markData, line:sub(last, last))
+            last = last + 1
         end
         result[markName] = markData
     end
@@ -297,9 +328,9 @@ function stringifyBoolsAndSingleNumbers(marksTable, first, last)
     for i = first, last do
         local value = marksTable[i]
         local valueT = type(value)
-        if valueT == 'number' then
-            result = result .. value
-        elseif value then
+        if valueT == 'number' or valueT == 'string' then
+            result = result .. tostring(value)
+        elseif  value then
             result = result .. 't'
         else
             result = result .. 'f'
@@ -310,10 +341,16 @@ end
 
 function stringifyMark(marksTable)
     local result = stringifyBoolsAndSingleNumbers(marksTable, 1, 12)
-    for i = 13, 24 do
+    for i = 13, 29 do
+        --print('insert', i, marksTable[i])
         result = result .. ',' .. marksTable[i]
     end
-    return result .. ',' .. stringifyBoolsAndSingleNumbers(marksTable, 25, 27)
+    local last = #marksTable
+    if last > 30 then
+        result = result .. ',' .. stringifyBoolsAndSingleNumbers(marksTable, 30, last)
+    end
+    --print('Stringify', result)
+    return result
 end
 
 function stringifyMarksTable(marksTable, order)
@@ -346,6 +383,7 @@ end
 
 function loadMarks()
     local songData = getMarksInstrumentSample().name or ''
+    --rprint('songData', songData)
     if songData then
         SongMarks, SongMarksOrder = readMarksString(songData)
     end
@@ -389,7 +427,7 @@ function updateMarksOrder(markName)
 end
 
 function addMark(markName, default)
-    print('addMark', markName);
+    --print('addMark', markName);
     SongMarks[markName] = renoiseMarkData()
     --if default then
         --DefaultMarks[markName] = SongMarks[markName]
@@ -400,7 +438,7 @@ function addMark(markName, default)
         --print('saved')
     --end
     updateMarksOrder(markName)
-    print('Addmark', markName)
+    --print('Addmark', markName)
 end
 
 function removeMark(markName)
@@ -417,14 +455,9 @@ end
 function saveMarks()
     local sample = getMarksInstrumentSample()
     sample.name = stringifyMarksTable(SongMarks, SongMarksOrder)
+    --sample.name = stringifyMarksTable(SongMarks)
+    --print('saveMarks', sample.name)
 end
-
---function saveDefaultMarks()
-    --local doc = renoise.Document.create('MarksPreferenceDefaults') {
-        --data = stringifyMarksTable(DefaultMarks)
-    --}
-    --doc:save_as(DefaultMarksFileName)
---end
 
 function summarizeMarkContent(markTable)
     if not markTable then
@@ -607,7 +640,6 @@ function handleRenoiseKey(dialog, views, key)
 end
 
 function handleNumpadKey(dialog, views, key)
-    rprint(key)
     local numpadKey = string.match(key.name, "^numpad numpad(%d)$")
     if numpadKey then
         local win = renoise.app().window
@@ -662,6 +694,8 @@ function handleNumpadKey(dialog, views, key)
             end
             win.active_upper_frame = val
             return true
+        elseif numpadKey == '*' then
+            preferences.movecursor = preferences.movecursor + 1 % 3
         end
     end
     return false
@@ -839,10 +873,9 @@ function showMarksDialog()
                     spacing = spacing,
                     style = 'invisible',
                     vb:text {
-                        text = "a-z  jump to a mark, shift=add, ctrl=remove\n" ..
-                        "Numlock, /, *, -, set Jump, Font, Close, Mini\n" ..
-                        "Numpad rows select view and tool defaults\n" ..
-                        "can be loaded and saved",
+                        text = "a-z jumps to a mark, A-Z toggles marks\n" ..
+                        "Numpad * Sets Jump Granularity\n" ..
+                        "Numpad 5 jumps to last mark,\nother numbers change view\n",
                         align = 'left'
                     }
                 },
@@ -852,12 +885,12 @@ function showMarksDialog()
                     vb:row {
                         vb:text {
                             text = 'Jump',
-                            tooltip = 'Increase jump granularity',
+                            tooltip = 'Granularity of jumps',
                         },
                         vb:switch {
                             id = 'jump',
                             items = JumpAccuracyLabels,
-                            width = 135,
+                            width = 155,
                             bind = preferences.movecursor
                         }
                     }
@@ -942,11 +975,11 @@ if renoise.tool then
 end
 
 renoise.tool():add_keybinding {
-    name = "Global:Tools:MarksDev",
+    name = "Global:Tools:Marks",
     invoke = showMarksDialog
 }
 
 renoise.tool():add_menu_entry {
-    name = "Main Menu:Tools:MarksDev",
+    name = "Main Menu:Tools:Marks",
     invoke = showMarksDialog
 }

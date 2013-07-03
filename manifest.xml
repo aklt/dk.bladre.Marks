@@ -2,7 +2,7 @@
 <RenoiseScriptingTool doc_version="0">
   <ApiVersion>3</ApiVersion>
   <Id>dk.bladre.Marks</Id>
-  <Version>1.03</Version>
+  <Version>1.05</Version>
   <Author>aklt [anders AT bladre.dk]</Author>
   <Name>Marks</Name>
   <Category>Main Menu</Category>
