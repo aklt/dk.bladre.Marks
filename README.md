@@ -22,7 +22,12 @@ When the dialog has focus:
 
 The granularity of a jump can be changed in the dialog
 
-  view:    Change just the view of the currently playing pattern
-  pattern: Change to pattern where mark is, but not cursor position.  Useful
-           for experimenting with mixes.
-  cursor:  Also move cursor when jumping.
+=view=
+    Change just the view of the currently playing pattern
+
+=pattern=
+    Change to pattern where mark is, but not cursor position.  Useful
+    for experimenting with mixes.
+
+=cursor=
+    Also move cursor when jumping.

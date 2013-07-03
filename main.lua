@@ -875,7 +875,7 @@ function showMarksDialog()
                     vb:text {
                         text = "a-z jumps to a mark, A-Z toggles marks\n" ..
                         "Numpad * Sets Jump Granularity\n" ..
-                        "Numpad 5 jumps to last mark,\nother numbers change view\n",
+                        "Numpad 5 jumps to last mark,\n  other Numpad numbers change view\n",
                         align = 'left'
                     }
                 },
@@ -884,9 +884,11 @@ function showMarksDialog()
                     spacing = spacing,
                     vb:row {
                         vb:text {
-                            text = 'Jump',
-                            tooltip = 'Granularity of jumps',
-                        },
+                            text = "Jump Granularity",
+                            align = 'center'
+                        }
+                    },
+                    vb:row {
                         vb:switch {
                             id = 'jump',
                             items = JumpAccuracyLabels,
