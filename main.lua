@@ -370,7 +370,7 @@ end
 function getMarksInstrumentSample()
     for i, instrument in ripairs(renoise.song().instruments) do
         if instrument.name == MARKS_INSTRUMENT_NAME then
-            return instrument.samples[1]
+            return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
         end
     end
     local index = #renoise.song().instruments + 1
@@ -378,7 +378,7 @@ function getMarksInstrumentSample()
     local instrument = renoise.song().instruments[index]
     instrument.name = MARKS_INSTRUMENT_NAME
     addInstrumentsNotifier()
-    return instrument.samples[1]
+    return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
 end
 
 function loadMarks()
