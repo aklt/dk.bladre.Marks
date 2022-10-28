@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <RenoiseScriptingTool doc_version="0">
-  <ApiVersion>3</ApiVersion>
+  <ApiVersion>5</ApiVersion>
   <Id>dk.bladre.Marks</Id>
   <Version>1.05</Version>
   <Author>aklt [anders AT bladre.dk]</Author>
