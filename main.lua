@@ -1,4 +1,8 @@
-_AUTO_RELOAD_DEBUG = true
+
+_AUTO_RELOAD_DEBUG = function()
+  -- do tests like showing a dialog, prompts whatever, or simply do nothing
+  print("Reload")
+end
 
 local MARKS_VERSION         = '1.05'
 local MARKS_FORMAT_VERSION  = 'dk.bladre.Marks/v2'
@@ -83,6 +87,7 @@ function renoiseMarkData()
         song.selected_effect_column_index or 0         -- 21
     }
     local selection = {0, 0, 0, 0, 0, 0}             
+
     local sa = song.selection_in_pattern
     if sa then
         selection[1] = sa.end_column                   -- 22 
@@ -368,16 +373,16 @@ function stringifyMarksTable(marksTable, order)
 end
 
 function getMarksInstrumentSample()
-    for i, instrument in ripairs(renoise.song().instruments) do
-        if instrument.name == MARKS_INSTRUMENT_NAME then
-            return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
-        end
-    end
-    local index = #renoise.song().instruments + 1
-    renoise.song():insert_instrument_at(index)
-    local instrument = renoise.song().instruments[index]
-    instrument.name = MARKS_INSTRUMENT_NAME
-    addInstrumentsNotifier()
+    -- for i, instrument in ripairs(renoise.song().instruments) do
+    --     if instrument.name == MARKS_INSTRUMENT_NAME then
+    --         return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
+    --     end
+    -- end
+    -- local index = #renoise.song().instruments + 1
+    -- renoise.song():insert_instrument_at(index)
+    -- local instrument = renoise.song().instruments[index]
+    -- instrument.name = MARKS_INSTRUMENT_NAME
+    -- addInstrumentsNotifier()
     return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
 end
 
