@@ -4,9 +4,9 @@ _AUTO_RELOAD_DEBUG = function()
   print("Reload")
 end
 
-local MARKS_VERSION         = '1.05'
-local MARKS_FORMAT_VERSION  = 'dk.bladre.Marks/v2'
-local MARKS_INSTRUMENT_NAME = '        _______Marks_______'
+MARKS_VERSION         = '1.05'
+MARKS_FORMAT_VERSION  = 'dk.bladre.Marks/v2'
+MARKS_INSTRUMENT_NAME = '        _______Marks_______'
 
 -- TODO Gui update
 local preferences = renoise.Document.create("MarksPreferences") {
@@ -378,11 +378,11 @@ function getMarksInstrumentSample()
     --         return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
     --     end
     -- end
-    -- local index = #renoise.song().instruments + 1
-    -- renoise.song():insert_instrument_at(index)
-    -- local instrument = renoise.song().instruments[index]
-    -- instrument.name = MARKS_INSTRUMENT_NAME
-    -- addInstrumentsNotifier()
+    local index = #renoise.song().instruments + 1
+    renoise.song():insert_instrument_at(index)
+    local instrument = renoise.song().instruments[index]
+    instrument.name = MARKS_INSTRUMENT_NAME
+    addInstrumentsNotifier()
     return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
 end
 
