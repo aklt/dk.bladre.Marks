@@ -4,7 +4,7 @@ _AUTO_RELOAD_DEBUG = function()
   print("Reload")
 end
 
-MARKS_VERSION         = '1.05'
+MARKS_VERSION         = '1.2.0'
 MARKS_FORMAT_VERSION  = 'dk.bladre.Marks/v2'
 MARKS_INSTRUMENT_NAME = '        _______Marks_______'
 
@@ -60,21 +60,28 @@ end
 -- Format: [1-12]:chars [13-29]:commas [30-]:chars
 function renoiseMarkData()
     local window = renoise.app().window
-    local view = {window.active_lower_frame,           --   1
-            window.active_middle_frame,                --   2
-            window.active_upper_frame,                 --   3
-            window.disk_browser_is_expanded,           --   4
-            window.lock_keyboard_focus,                --   5
-            window.lower_frame_is_visible,             --   6
-            window.mixer_fader_type,                   --   7
-            window.mixer_view_post_fx,                 --   8
-            window.pattern_advanced_edit_is_visible,   --   9
-            window.pattern_matrix_is_visible,          --  10
-            window.sample_record_dialog_is_visible,    --  11
-            window.upper_frame_is_visible}             --  12
+    local view = {
+      -- window.fullscreen,
+      -- window.instrument_box_is_visible,
+      -- window.instrument_editor_is_detached,
+      -- window.mixer_view_is_detached,
+      window.active_lower_frame,                 --   1
+      window.active_middle_frame,                --   2
+      window.active_upper_frame,                 --   3
+      window.disk_browser_is_visible,            --   4
+      window.lock_keyboard_focus,                --   5
+      window.lower_frame_is_visible,             --   6
+      window.mixer_fader_type,                   --   7
+      window.mixer_view_post_fx,                 --   8
+      window.pattern_advanced_edit_is_visible,   --   9
+      window.pattern_matrix_is_visible,          --  10
+      window.sample_record_dialog_is_visible,    --  11
+      window.upper_frame_is_visible              --  12
+    }
     local song = renoise.song()
     local track = song.selected_track_index
     local indexes = {
+        -- TODO There are many more here
         song.selected_instrument_index,                -- 13
         song.selected_sample_index,                    -- 14
         track,                                         -- 15
@@ -86,11 +93,11 @@ function renoiseMarkData()
         song.selected_note_column_index or 0,          -- 20
         song.selected_effect_column_index or 0         -- 21
     }
-    local selection = {0, 0, 0, 0, 0, 0}             
+    local selection = {0, 0, 0, 0, 0, 0}
 
     local sa = song.selection_in_pattern
     if sa then
-        selection[1] = sa.end_column                   -- 22 
+        selection[1] = sa.end_column                   -- 22
         selection[2] = sa.end_line                     -- 23
         selection[3] = sa.end_track                    -- 24
         selection[4] = sa.start_column                 -- 25
@@ -128,7 +135,7 @@ function jumpToMark(markName)
     if mark[3] ~= 0 then
         window.active_upper_frame            = mark[3]
     end
-    window.disk_browser_is_expanded          = mark[4]
+    window.disk_browser_is_visible          = mark[4]
     window.lock_keyboard_focus               = mark[5]
     window.lower_frame_is_visible            = mark[6]
     window.mixer_fader_type                  = mark[7]
@@ -142,7 +149,8 @@ function jumpToMark(markName)
         if mark[13] <= #song.instruments then
             song.selected_instrument_index       = mark[13]
             if mark[14] <= #song.instruments[mark[13]].samples then
-                song.selected_sample_index       = mark[14]
+              -- TODO This may be nil
+                -- song.selected_sample_index       = mark[14]
             end
         end
         if mark[18] <= #song.sequencer.pattern_sequence then
@@ -378,16 +386,18 @@ function getMarksInstrumentSample()
     --         return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
     --     end
     -- end
-    local index = #renoise.song().instruments + 1
-    renoise.song():insert_instrument_at(index)
-    local instrument = renoise.song().instruments[index]
-    instrument.name = MARKS_INSTRUMENT_NAME
-    addInstrumentsNotifier()
-    return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
+    -- local index = #renoise.song().instruments + 1
+    -- renoise.song():insert_instrument_at(index)
+    -- TODO Find a better way to save marks info
+    -- local instrument = renoise.song().instruments[index]
+    -- instrument.name = MARKS_INSTRUMENT_NAME
+    -- addInstrumentsNotifier()
+    -- return instrument.samples[1].sample_buffer:sample_data(1, 1) -- (channel_index, frame_index)
+    return renoise.song().tool_data or ''
 end
 
 function loadMarks()
-    local songData = getMarksInstrumentSample().name or ''
+    local songData = getMarksInstrumentSample()
     --rprint('songData', songData)
     if songData then
         SongMarks, SongMarksOrder = readMarksString(songData)
@@ -432,7 +442,7 @@ function updateMarksOrder(markName)
 end
 
 function addMark(markName, default)
-    --print('addMark', markName);
+    print('addMark', markName);
     SongMarks[markName] = renoiseMarkData()
     --if default then
         --DefaultMarks[markName] = SongMarks[markName]
@@ -458,16 +468,15 @@ end
 
 
 function saveMarks()
-    local sample = getMarksInstrumentSample()
-    sample.name = stringifyMarksTable(SongMarks, SongMarksOrder)
-    --sample.name = stringifyMarksTable(SongMarks)
-    --print('saveMarks', sample.name)
+    print('Save ' .. stringifyMarksTable(SongMarks, SongMarksOrder))
+    renoise.song().tool_data = stringifyMarksTable(SongMarks)
 end
 
 function summarizeMarkContent(markTable)
     if not markTable then
         return nil
     end
+    rprint(markTable)
     local a = renoise.ApplicationWindow
     local result = {}
     local upper = ''
@@ -509,7 +518,7 @@ function summarizeMarkContent(markTable)
             trackName = ' ' .. markTable[15]
         end
         table.insert(result, 'Mixer ' .. trackName:match("^%s*(.-)%s*$") .. deviceName:match("^%s*(.-)%s*$"))
-    elseif markTable[2] == a.MIDDLE_FRAME_KEYZONE_EDITOR then
+    elseif markTable[2] == a.MIDDLE_FRAME_INSTRUMENT_SAMPLE_KEYZONES then
         local instrument
         local instrumentName = ''
         local song = renoise.song()
@@ -537,12 +546,8 @@ function summarizeMarkContent(markTable)
         table.insert(result, 'Sample ' ..  sampleName:match("^%s*(.-)%s*$"))
     end
     if markTable[12] and markTable[3] ~= 0 then
-        if markTable[3] == a.UPPER_FRAME_DISK_BROWSER then
-            upper = ' Disk Browser'
-        elseif markTable[3] == a.UPPER_FRAME_TRACK_SCOPES then
+        if markTable[3] == a.UPPER_FRAME_TRACK_SCOPES then
             upper = ' Track Scopes'
-        elseif markTable[3] == a.UPPER_FRAME_MASTER_SCOPES then
-            upper = ' Master Scopes'
         elseif markTable[3] == a.UPPER_FRAME_MASTER_SPECTRUM then
             upper = ' Master Spectrum'
         end
