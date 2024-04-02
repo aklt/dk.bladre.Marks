@@ -30,6 +30,51 @@ local DefaultMarks   = {}
 local DefaultMarksFileName = renoise.tool().bundle_path .. 'defaults.xml'
 local REF = {}
 
+--
+-- {{{1 Tools
+--
+local function _iterSeparator(separator, string, amount)
+  local index = 0
+  if not amount then
+    amount = 2147483647
+  end
+  return function()
+    if #string > 0 and index < amount then
+      local endline = string:find(separator)
+      if not endline then
+        endline = #string + 1
+      end
+      local data = string:sub(1, endline - 1)
+      string = string:sub(endline + 1)
+      index = index + 1
+      return index, data
+    end
+    return nil
+  end
+end
+
+local function _iterChars(amount, string)
+  local count = 0
+  return function ()
+    count = count + 1
+    if count <= amount then
+      local result = string:sub(count, count)
+      if #result > 0 then
+        if result:match('^%d$') then
+          result = tonumber(result)
+          return count, result
+        elseif result == 't' then
+          return count, true
+        elseif result == 'f' then
+          return count, false
+        end
+        return count, result
+      end
+    end
+    return nil
+  end
+end
+
 -- http://stackoverflow.com/questions/1410862/concatenation-of-tables-in-lua
 local function array_concat(...)
     local t = {}
@@ -45,13 +90,13 @@ local function array_concat(...)
     end
     return t
 end
+-- 1}}}
 
-local function renoiseView()
-    return REF.vb.views
-end
-
+--
+-- {{{1 RW Renoise Marks
 -- Format: [1-16]:chars [17-37]:commas [38-]:chars
-local function renoiseMarkData()
+--
+local function renoiseMarkRead()
     local window = renoise.app().window
     local song = renoise.song()
     local selected_track_index = song.selected_track_index
@@ -125,57 +170,156 @@ local function renoiseMarkData()
     return array_concat(view, indexes, selection, trackView, collapse)
 end
 
-local function stringifyBoolsAndSingleNumbers(marksTable, first, last)
-    local result = ''
-    for i = first, last do
-        local value = marksTable[i]
-        local valueT = type(value)
-        if valueT == 'number' or valueT == 'string' then
-            result = result .. tostring(value)
-        elseif  value then
-            result = result .. 't'
-        else
-            result = result .. 'f'
+local function renoiseMarkGoto(markName)
+    local mark = SongMarks[markName]
+    if not mark then
+        return nil
+    end
+    local window = renoise.app().window
+    local song   = renoise.song()
+    -- window.fullscreen                       = mark[1]
+    window.instrument_box_is_visible        = mark[2]
+    window.instrument_editor_is_detached    = mark[3]
+    window.mixer_view_is_detached           = mark[4]
+
+    if mark[5] ~= 0 then
+        window.active_lower_frame            = mark[5]
+    end
+    window.active_middle_frame               = mark[6]
+    if mark[7] ~= 0 then
+        window.active_upper_frame            = mark[7]
+    end
+    window.disk_browser_is_visible           = mark[8]
+    window.lock_keyboard_focus               = mark[9]
+    window.lower_frame_is_visible            = mark[10]
+    window.mixer_fader_type                  = mark[11]
+    window.mixer_view_post_fx                = mark[12]
+    window.pattern_advanced_edit_is_visible  = mark[13]
+    window.pattern_matrix_is_visible         = mark[14]
+    window.sample_record_dialog_is_visible   = mark[15]
+    window.upper_frame_is_visible            = mark[16]
+    -- TODO Collect errors
+    song.selected_phrase_index                = mark[17]
+    song.selected_sample_device_chain_index   = mark[18]
+    song.selected_sample_device_index         = mark[19]
+    song.selected_sample_modulation_set_index = mark[20]
+    song.selected_track_device_index          = mark[21]
+    song.selected_track_index                 = mark[22]
+
+    if preferences.movecursor.value > 1 then
+        if mark[23] <= #song.instruments then
+            song.selected_instrument_index       = mark[23]
+            if mark[24] > 0 and mark[24] <= #song.instruments[mark[23]].samples then
+               song.selected_sample_index       = mark[24]
+            end
+        end
+        if mark[28] > 0 and mark[28] <= #song.sequencer.pattern_sequence then
+            song.selected_sequence_index     = mark[28]
+            if preferences.movecursor.value > 2 and mark[27] <= #song.patterns and mark[29] <= song.patterns[mark[27]].number_of_lines then
+                song.transport.playback_pos  = renoise.SongPos(mark[28], mark[29])
+            end
+        end
+
+        if mark[25] <= #song.tracks then
+            local trackIdx = mark[25]
+            song.selected_track_index        = trackIdx
+            if mark[26] <= #song.tracks[trackIdx].devices then
+                song.selected_device_index       = mark[26]
+            end
+            local note                           = mark[30]
+            local effect                         = mark[31]
+            if note > 0 and song.selected_note_column_index > 0 then
+                song.selected_note_column_index = note
+            end
+            if effect > 0 then
+                song.selected_effect_column_index = effect
+            end
+        end
+        if mark[32] > 0 then
+            song.selection_in_pattern = {
+                end_column   = mark[32],
+                end_line     = mark[33],
+                end_track    = mark[34],
+                start_column = mark[35],
+                start_line   = mark[36],
+                start_track  = mark[37]}
+        end
+        -- TODO Check for support of columns
+        local track = song.tracks[mark[25]]
+        track.sample_effects_column_visible = mark[38]
+        track.solo_state                    = mark[39]
+        track.visible_effect_columns        = mark[40]
+        track.visible_note_columns          = mark[41]
+        track.volume_column_visible         = mark[42]
+        track.panning_column_visible        = mark[43]
+        track.delay_column_visible          = mark[44]
+    end
+    if preferences.movecursor.value > 0 then
+        local i = 1
+        local last = #song.tracks
+        local t = renoise.song().tracks
+        while i < last do
+            if t then
+                 local value = mark[44 + i]
+                 if value then
+                     value = not(not(value))
+                 end
+                 if t[i].type == renoise.Track.TRACK_TYPE_GROUP then
+                     t[i].group_collapsed = value
+                 else
+                     t[i].collapsed = value
+                 end
+            end
+            i = i + 1
         end
     end
-    return result
+    -- updateMarksOrder(markName)
+    saveMarks()
+    statusMsg('jump  ' .. markName:upper() .. '  ' .. summarizeMarkContent(mark))
+    -- updateMarksOrder(markName)
+    return mark
 end
 
-local function stringifyMark(marksTable)
-    local result = stringifyBoolsAndSingleNumbers(marksTable, 1, 16)
-    for i = 17, 37 do
-        result = result .. ',' .. marksTable[i]
-    end
-    local last = #marksTable
-    if last > 37 then
-        result = result .. ',' .. stringifyBoolsAndSingleNumbers(marksTable, 38, last)
-    end
-    --print('Stringify', result)
-    return result
-end
-
-local function stringifyMarksTable(marksTable, order)
-    local result = MARKS_FORMAT_VERSION .. "\n"
-    if order then
-        for _, markName in ipairs(order) do
-            result = result .. markName .. stringifyMark(marksTable[markName]) .. "\n"
+local function marksFromString(marksString)
+  local result = {}
+  local string = string.sub(marksString, #MARKS_FORMAT_VERSION + 2)
+  if marksString then
+    for _i, line in _iterSeparator("\n", string) do
+      print('LINE 1: ' .. line)
+      local markData = {}
+      local markName = line:sub(1, 1)
+      line = line:sub(2)
+      print('LINE 2: ' .. line)
+      for _i, value in _iterChars(16, line) do
+        table.insert(markData, value)
+      end
+      line = line:sub(18)
+      local length = 0
+      print('LINE 3: ' .. line)
+      for _i, value in _iterSeparator(',', line, 21) do
+        table.insert(markData, tonumber(value))
+        if type(value) == type(1) then
+          value = tostring(value)
         end
-    else
-        for markName, markData in pairs(marksTable) do
-            result =  result .. markName .. stringifyMark(markData) .. "\n"
-        end
+        length = length + value:len() + 1
+      end
+      line = line:sub(length + 1)
+      local last  = 1
+      print('LINE 4: ' .. line)
+      for _i, value in _iterChars(#renoise.song().tracks, line) do
+        table.insert(markData, value)
+        last = last + 1
+      end
+      last = last
+      local copyTo = line:len()
+      while last <= copyTo do
+        table.insert(markData, line:sub(last, last))
+        last = last + 1
+      end
+      result[markName] = markData
     end
-    return result
-end
-
-
-local function saveMarks()
-    print('Save ' .. stringifyMarksTable(SongMarks, SongMarksOrder))
-    renoise.song().tool_data = stringifyMarksTable(SongMarks)
-end
-
-local function statusMsg(msg)
-    renoise.app():show_status('Marks: ' .. msg)
+  end
+  return result
 end
 
 local function summarizeMarkContent(markTable)
@@ -280,159 +424,96 @@ local function summarizeMarkContent(markTable)
 end
 
 
-local function jumpToMark(markName)
-    local mark = SongMarks[markName]
-    if not mark then
-        return nil
-    end
-    local window = renoise.app().window
-    local song   = renoise.song()
-    -- window.fullscreen                       = mark[1]
-    window.instrument_box_is_visible        = mark[2]
-    window.instrument_editor_is_detached    = mark[3]
-    window.mixer_view_is_detached           = mark[4]
+-- 1}}}
 
-    if mark[5] ~= 0 then
-        window.active_lower_frame            = mark[5]
+--
+-- Read and Stringify  {{{1
+--
+local function _stringifyBoolsAndSingleNumbers(marksTable, first, last)
+  local result = ''
+  for i = first, last do
+    local value = marksTable[i]
+    local valueT = type(value)
+    if valueT == 'number' or valueT == 'string' then
+      result = result .. tostring(value)
+    elseif  value then
+      result = result .. 't'
+    else
+      result = result .. 'f'
     end
-    window.active_middle_frame               = mark[6]
-    if mark[7] ~= 0 then
-        window.active_upper_frame            = mark[7]
-    end
-    window.disk_browser_is_visible           = mark[8]
-    window.lock_keyboard_focus               = mark[9]
-    window.lower_frame_is_visible            = mark[10]
-    window.mixer_fader_type                  = mark[11]
-    window.mixer_view_post_fx                = mark[12]
-    window.pattern_advanced_edit_is_visible  = mark[13]
-    window.pattern_matrix_is_visible         = mark[14]
-    window.sample_record_dialog_is_visible   = mark[15]
-    window.upper_frame_is_visible            = mark[16]
-    -- TODO Collect errors
-    song.selected_phrase_index                = mark[17]
-    song.selected_sample_device_chain_index   = mark[18]
-    song.selected_sample_device_index         = mark[19]
-    song.selected_sample_modulation_set_index = mark[20]
-    song.selected_track_device_index          = mark[21]
-    song.selected_track_index                 = mark[22]
-
-    if preferences.movecursor.value > 1 then
-        if mark[23] <= #song.instruments then
-            song.selected_instrument_index       = mark[23]
-            if mark[24] > 0 and mark[24] <= #song.instruments[mark[23]].samples then
-               song.selected_sample_index       = mark[24]
-            end
-        end
-        if mark[28] > 0 and mark[28] <= #song.sequencer.pattern_sequence then
-            song.selected_sequence_index     = mark[28]
-            if preferences.movecursor.value > 2 and mark[27] <= #song.patterns and mark[29] <= song.patterns[mark[27]].number_of_lines then
-                song.transport.playback_pos  = renoise.SongPos(mark[28], mark[29])
-            end
-        end
-
-        if mark[25] <= #song.tracks then
-            local trackIdx = mark[25]
-            song.selected_track_index        = trackIdx
-            if mark[26] <= #song.tracks[trackIdx].devices then
-                song.selected_device_index       = mark[26]
-            end
-            local note                           = mark[30]
-            local effect                         = mark[31]
-            if note > 0 then
-                song.selected_note_column_index = note
-            end
-            if effect > 0 then
-                song.selected_effect_column_index = effect
-            end
-        end
-        if mark[32] > 0 then
-            song.selection_in_pattern = {
-                end_column   = mark[32],
-                end_line     = mark[33],
-                end_track    = mark[34],
-                start_column = mark[35],
-                start_line   = mark[36],
-                start_track  = mark[37]}
-        end
-        -- TODO Check for support of columns
-        local track = song.tracks[mark[25]]
-        track.sample_effects_column_visible = mark[38]
-        track.solo_state                    = mark[39]
-        track.visible_effect_columns        = mark[40]
-        track.visible_note_columns          = mark[41]
-        track.volume_column_visible         = mark[42]
-        track.panning_column_visible        = mark[43]
-        track.delay_column_visible          = mark[44]
-    end
-    if preferences.movecursor.value > 0 then
-        local i = 1
-        local last = #song.tracks
-        local t = renoise.song().tracks
-        while i < last do
-            if t then
-                 local value = mark[44 + i]
-                 if value then
-                     value = not(not(value))
-                 end
-                 if t[i].type == renoise.Track.TRACK_TYPE_GROUP then
-                     t[i].group_collapsed = value
-                 else
-                     t[i].collapsed = value
-                 end
-            end
-            i = i + 1
-        end
-    end
-    -- updateMarksOrder(markName)
-    saveMarks()
-    statusMsg('jump  ' .. markName:upper() .. '  ' .. summarizeMarkContent(mark))
-    -- updateMarksOrder(markName)
-    return mark
+  end
+  return result
 end
 
-local function _iterSeparator(separator, string, amount)
-    local index = 0
-    if not amount then
-        amount = 2147483647
-    end
-    return function()
-        if #string > 0 and index < amount then
-            local endline = string:find(separator)
-            if not endline then
-            endline = #string + 1
-        end
-        local data = string:sub(1, endline - 1)
-        string = string:sub(endline + 1)
-        index = index + 1
-        return index, data
-        end
-        return nil
-    end
+local function _stringifyMark(marksTable)
+  local result = _stringifyBoolsAndSingleNumbers(marksTable, 1, 16)
+  for i = 17, 37 do
+    result = result .. ',' .. marksTable[i]
+  end
+  local last = #marksTable
+  if last > 37 then
+    result = result .. ',' .. _stringifyBoolsAndSingleNumbers(marksTable, 38, last)
+  end
+  --print('Stringify', result)
+  return result
 end
 
-local function _iterChars(amount, string)
-    local count = 0
-    return function ()
-        count = count + 1
-        if count <= amount then
-            local result = string:sub(count, count)
-            if #result > 0 then
-                if result:match('^%d$') then
-                    result = tonumber(result)
-                    return count, result
-                elseif result == 't' then
-                    return count, true
-                elseif result == 'f' then
-                    return count, false
-                end
-                return count, result
-            end
-        end
-        return nil
-    end
+local function marksToString(marksTable)
+  local result = MARKS_FORMAT_VERSION .. "\n"
+  for markName, markData in pairs(marksTable) do
+    result =  result .. markName .. _stringifyMark(markData) .. "\n"
+  end
+  return result
 end
 
-local function _iterCSV(amount, string)
+local function loadMarks()
+  local songData = renoise.song().tool_data or ''
+  local SongMarks = marksFromString(songData)
+  -- TODO load defaults saving Marks state
+  --if io.exists(DefaultMarksFileName) then
+  --local doc = renoise.Document.create('MarksPreferenceDefaults') {
+  --data = ''
+  --}
+  --local ok, err = doc:load_from(DefaultMarksFileName)
+  --if not ok then
+  --print('Got error loading defaults.xml', err)
+  --else
+  --DefaultMarks = marksFromString(doc:property('data').value)
+  --end
+  --end
+  print('Loaded')
+  print(marksToString(SongMarks))
+end
+
+local function getMarksTitle(mini)
+  if not SongMarksOrder[1] then
+    return ''
+  end
+  local result = SongMarksOrder[1]:upper() or ' '
+  for i, char in ipairs(SongMarksOrder) do
+    if i > 1 then
+      result = result .. ' ' .. char
+    end
+  end
+  local add = ''
+  if mini then
+    add = ' - LMNM'
+  else
+    add = ' - Letter Marked Numpad Mixer v' .. MARKS_VERSION
+  end
+  return result .. add
+end
+
+local function saveMarks()
+    print('Save ' .. marksToString(SongMarks, SongMarksOrder))
+    renoise.song().tool_data = marksToString(SongMarks)
+end
+-- 1}}}
+local function statusMsg(msg)
+    renoise.app():show_status('XX Marks: ' .. msg)
+end
+
+local function TODO_UNUSED_iterCSV(amount, string)
     if not amount then
         amount = 2147483647
     end
@@ -463,282 +544,177 @@ local function _iterCSV(amount, string)
     end
 end
 
-local function readMarksString(marksString)
-    if not marksString then
-        return {}
-    end
-    local result = {}
-    local order = {}
-    local string = string.sub(marksString, #MARKS_FORMAT_VERSION + 2)
-    local count =- 0
-    for i, line in _iterSeparator("\n", string) do
-        print('LINE 1: ' .. line)
-        local markData = {}
-        local markName = line:sub(1, 1)
-        table.insert(order, markName)
-        line = line:sub(2)
-        print('LINE 2: ' .. line)
-        for i, value in _iterChars(16, line) do
-            table.insert(markData, value)
-        end
-        line = line:sub(18)
-        local length = 0
-        print('LINE 3: ' .. line)
-        for i, value in _iterSeparator(',', line, 21) do
-            table.insert(markData, tonumber(value))
-            if type(value) == type(1) then
-                value = tostring(value)
-            end
-            length = length + value:len() + 1
-        end
-        line = line:sub(length + 1)
-        local last  = 1
-        print('LINE 4: ' .. line)
-        for i, value in _iterChars(#renoise.song().tracks, line) do
-            table.insert(markData, value)
-            last = last + 1
-        end
-        last = last
-        local copyTo = line:len()
-        while last <= copyTo do
-            table.insert(markData, line:sub(last, last))
-            last = last + 1
-        end
-        result[markName] = markData
-    end
-    return result, order
-end
-
-local function loadMarks()
-    local songData = renoise.song().tool_data or ''
-    --rprint('songData', songData)
-    if songData then
-        SongMarks, SongMarksOrder = readMarksString(songData)
-    end
-    -- Don't load defaults
-    --if io.exists(DefaultMarksFileName) then
-        --local doc = renoise.Document.create('MarksPreferenceDefaults') {
-            --data = ''
-        --}
-        --local ok, err = doc:load_from(DefaultMarksFileName)
-        --if not ok then
-            --print('Got error loading defaults.xml', err)
-        --else
-            --DefaultMarks = readMarksString(doc:property('data').value)
-        --end
-    --end
-    print('Loaded')
-    print(stringifyMarksTable(SongMarks))
-end
-
-local function getMarksMiniTitle()
-    if not SongMarksOrder[1] then
-        return ''
-    end
-    local result = SongMarksOrder[1]:upper()
-    for i, char in ipairs(SongMarksOrder) do
-        if i > 1 then
-            result = result .. ' ' .. char
-        end
-    end
-    return result
-end
-
 local function updateMarksOrder(markName)
-    oprint(SongMarksOrder)
-    for i, v in ipairs(SongMarksOrder) do
-        if v == markName then
-            table.remove(SongMarksOrder, i)
-            break
-        end
+  oprint(SongMarksOrder)
+  for i, v in ipairs(SongMarksOrder) do
+    if v == markName then
+      table.remove(SongMarksOrder, i)
+      break
     end
-    table.insert(SongMarksOrder, 1, markName)
+  end
+  table.insert(SongMarksOrder, 1, markName)
 end
 
 local function addMark(markName, default)
-    print('addMark', markName);
-    SongMarks[markName] = renoiseMarkData()
-    --if default then
-        --DefaultMarks[markName] = SongMarks[markName]
-        --local doc = renoise.Document.create('MarksPreferenceDefaults') {
-            --data = stringifyMarksTable(DefaultMarks)
-        --}
-        --doc:save_as(DefaultMarksFileName)
-        --print('saved')
-    --end
-    updateMarksOrder(markName)
-    --print('Addmark', markName)
+  print('addMark', markName);
+  SongMarks[markName] = renoiseMarkRead()
+  --if default then
+  --DefaultMarks[markName] = SongMarks[markName]
+  --local doc = renoise.Document.create('MarksPreferenceDefaults') {
+  --data = marksToString(DefaultMarks)
+  --}
+  --doc:save_as(DefaultMarksFileName)
+  --print('saved')
+  --end
+  updateMarksOrder(markName)
+  --print('Addmark', markName)
 end
 
 local function removeMark(markName)
-    SongMarks[markName] = nil
-    for i, val in ipairs(SongMarksOrder) do
-        if val == markName then
-            table.remove(SongMarksOrder, i)
-            break
-        end
+  SongMarks[markName] = nil
+  for i, val in ipairs(SongMarksOrder) do
+    if val == markName then
+      table.remove(SongMarksOrder, i)
+      break
     end
+  end
 end
 
-
--- {{{1 Handling keys
+--
+-- Keyboard input {{{1
+--
 local function keyUpDown(dir)
-    return function (key)
-        local song  = renoise.song()
-        local line  = song.selected_line_index
-        local pos   = song.transport.edit_pos
-        local lines = song:pattern(song.sequencer:pattern(pos.sequence)).number_of_lines
-        line = line + dir
-        if line < 1 then
-            -- TODO Get the proper length
-            line = lines
-        end
-        if line > lines then
-            line = 1
-        end
-        song.transport.edit_pos = renoise.SongPos(pos.sequence, line)
+  return function (key)
+    local song  = renoise.song()
+    local line  = song.selected_line_index
+    local pos   = song.transport.edit_pos
+    local lines = song:pattern(song.sequencer:pattern(pos.sequence)).number_of_lines
+    line = line + dir
+    if line < 1 then
+      -- TODO Get the proper length
+      line = lines
     end
+    if line > lines then
+      line = 1
+    end
+    song.transport.edit_pos = renoise.SongPos(pos.sequence, line)
+  end
 end
 
 local function keyLeftRight(dir)
-    return function (key)
-        local song = renoise.song()
-        local effect = song.selected_effect_column_index
-        local note = song.selected_note_column_index
-        local newNote = note + dir
-        if newNote > 0 then
-            if newNote <= song.selected_track.visible_note_columns then
-                song.selected_note_column_index = newNote
-            else
-                print "Next track"
-            end
-        elseif effect ~= 0 then
-            song.selected_effect_column_index = effect + dir
-        end
-        print(effect, note)
+  return function (key)
+    local song = renoise.song()
+    local effect = song.selected_effect_column_index
+    local note = song.selected_note_column_index
+    local newNote = note + dir
+    if newNote > 0 then
+      if newNote <= song.selected_track.visible_note_columns then
+        song.selected_note_column_index = newNote
+      else
+        print "Next track"
+      end
+    elseif effect ~= 0 then
+      song.selected_effect_column_index = effect + dir
     end
+    print(effect, note)
+  end
 end
 
 local forwardKeysToRenoiseName = {
-    -- TODO Allow selection
-    up    = keyUpDown(-1),
-    down  = keyUpDown(1),
-    left  = keyLeftRight(-1),
-    right = keyLeftRight(1),
+  -- TODO Allow selection
+  up    = keyUpDown(-1),
+  down  = keyUpDown(1),
+  left  = keyLeftRight(-1),
+  right = keyLeftRight(1),
 
-    space = function (key)
-        local trans = renoise.song().transport
-        if trans.playing then
-            trans:stop()
-        else
-            local mode = renoise.Transport.PLAYMODE_RESTART_PATTERN
-            if key.modifiers == 'shift' then
-                mode = renoise.Transport.PLAYMODE_CONTINUE_PATTERN
-            end
-            trans:start(mode)
-        end
+  space = function (key)
+    local trans = renoise.song().transport
+    if trans.playing then
+      trans:stop()
+    else
+      local mode = renoise.Transport.PLAYMODE_RESTART_PATTERN
+      if key.modifiers == 'shift' then
+        mode = renoise.Transport.PLAYMODE_CONTINUE_PATTERN
+      end
+      trans:start(mode)
     end
+  end
 }
 
 local function handleRenoiseKey(dialog, views, key)
-    if key.name == 'esc' then
-        dialog:close()
-        return true
-    end
-    local fun = forwardKeysToRenoiseName[key.name]
-    if fun then
-        fun(key)
-        return true
-    end
-    return false
+  if key.name == 'esc' then
+    dialog:close()
+    return true
+  end
+  local fun = forwardKeysToRenoiseName[key.name]
+  if fun then
+    fun(key)
+    return true
+  end
+  return false
 end
 
 local function handleNumpadKey(dialog, views, key)
-    local numpadKey = string.match(key.name, "^numpad numpad(%d)$")
-    if numpadKey then
-        local win = renoise.app().window
-        if numpadKey == '1' then
-            local val = win.active_lower_frame - 1
-            if val <= 0 then
-                val = 4
-            end
-            win.active_lower_frame = val
-            return true
-        elseif numpadKey == '2' then
-            win.lower_frame_is_visible = not win.lower_frame_is_visible
-            return true
-        elseif numpadKey == '3' then
-            local val = win.active_lower_frame + 1
-            if val >= 5 then
-                val = 1
-            end
-            win.active_lower_frame = val
-            return true
-        elseif numpadKey == '4' then
-            local val = win.active_middle_frame - 1
-            if val <= 0 then
-                val = 4
-            end
-            win.active_middle_frame = val
-            return true
-        elseif numpadKey == '5' then
-            jumpToMark(SongMarksOrder[1])
-            return true
-        elseif numpadKey == '6' then
-            local val = win.active_middle_frame + 1
-            if val >= 5 then
-                val = 1
-            end
-            win.active_middle_frame = val
-            return true
-        elseif numpadKey == '7' then
-            local val = win.active_upper_frame - 1
-            if val <= 0 then
-                val = 4
-            end
-            win.active_upper_frame = val
-            return true
-        elseif numpadKey == '8' then
-            win.upper_frame_is_visible = not win.upper_frame_is_visible
-            return true
-        elseif numpadKey == '9' then
-            local val = win.active_upper_frame + 1
-            if val >= 5 then
-                val = 1
-            end
-            win.active_upper_frame = val
-            return true
-        elseif numpadKey == '*' then
-            preferences.movecursor = preferences.movecursor + 1 % 3
-        end
+  local numpadKey = string.match(key.name, "^numpad numpad(%d)$")
+  if numpadKey then
+    local win = renoise.app().window
+    if numpadKey == '1' then
+      local val = win.active_lower_frame - 1
+      if val <= 0 then
+        val = 4
+      end
+      win.active_lower_frame = val
+      return true
+    elseif numpadKey == '2' then
+      win.lower_frame_is_visible = not win.lower_frame_is_visible
+      return true
+    elseif numpadKey == '3' then
+      local val = win.active_lower_frame + 1
+      if val >= 5 then
+        val = 1
+      end
+      win.active_lower_frame = val
+      return true
+    elseif numpadKey == '4' then
+      local val = win.active_middle_frame - 1
+      if val <= 0 then
+        val = 4
+      end
+      win.active_middle_frame = val
+      return true
+    elseif numpadKey == '5' then
+      renoiseMarkGoto(SongMarksOrder[1])
+      return true
+    elseif numpadKey == '6' then
+      local val = win.active_middle_frame + 1
+      if val >= 5 then
+        val = 1
+      end
+      win.active_middle_frame = val
+      return true
+    elseif numpadKey == '7' then
+      local val = win.active_upper_frame - 1
+      if val <= 0 then
+        val = 4
+      end
+      win.active_upper_frame = val
+      return true
+    elseif numpadKey == '8' then
+      win.upper_frame_is_visible = not win.upper_frame_is_visible
+      return true
+    elseif numpadKey == '9' then
+      local val = win.active_upper_frame + 1
+      if val >= 5 then
+        val = 1
+      end
+      win.active_upper_frame = val
+      return true
+    elseif numpadKey == '*' then
+      preferences.movecursor = preferences.movecursor + 1 % 3
     end
-    return false
+  end
+  return false
 end
-
-local function handleAZ(dialog, views, key)
-    local char = key.character
-    if char then
-        local byte = char:byte(1)
-        if byte >= ('A'):byte(1) and byte <= ('Z'):byte(1) and key.modifiers == 'shift' then
-            local mark = char:lower()
-            addMark(mark)
-            saveMarks()
-            if preferences.miniwindow.value then
-                REF.dialog:close()
-                showMarksDialog()
-            else
-                updateButtons(REF.vb.views, mark, DefaultMarks[mark], SongMarks[mark])
-            end
-            return true
-        elseif byte >= ('a'):byte(1) and byte <= ('z'):byte(1) then
-            jumpToMark(char)
-            return true
-        end
-    end
-    return false
-end
-
--- 1}}}
 
 local function updateButtons(views, mark, default, song)
     if views then
@@ -765,6 +741,35 @@ local function updateButtons(views, mark, default, song)
     end
 end
 
+local function handleAZ(dialog, views, key)
+  local char = key.character
+  if char then
+    local byte = char:byte(1)
+    if byte >= ('A'):byte(1) and byte <= ('Z'):byte(1) and key.modifiers == 'shift' then
+      local mark = char:lower()
+      if SongMarks[mark] then
+        removeMark(mark)
+      else
+        addMark(mark)
+      end
+      saveMarks()
+      if preferences.miniwindow.value then
+        REF.dialog:close()
+        showMarksDialog()
+      else
+        updateButtons(REF.vb.views, mark, DefaultMarks[mark], SongMarks[mark])
+      end
+      return true
+    elseif byte >= ('a'):byte(1) and byte <= ('z'):byte(1) then
+      renoiseMarkGoto(char)
+      return true
+    end
+  end
+  return false
+end
+
+-- 1}}}
+
 local function actionJump(mark)
     if SongMarks[mark] then
         removeMark(mark)
@@ -786,20 +791,20 @@ end
 local function actionHandler(ref, action, mark)
     if action == 'jump' then
         return function ()
-            jumpToMark(mark)
+            renoiseMarkGoto(mark)
         end
     else
+      actionJump(mark)
         print('Unknown action', action, mark)
     end
 end
 
+--
+-- Build GUI {{{1
+--
 local function buildRow(ref, mark, default, song)
-    local colorB1 = colorDefault
     local colorB2 = colorMark
     local colorB3 = colorJump
-    if not default then
-        colorB1 = colorNone
-    end
     if not song then
         colorB2 = colorNone
     end
@@ -826,8 +831,8 @@ local function buildRow(ref, mark, default, song)
                 else
                     addMark(mark)
                 end
-                updateButtons(REF.vb.views, mark, DefaultMarks[mark], SongMarks[mark])
                 saveMarks()
+                updateButtons(REF.vb.views, mark, DefaultMarks[mark], SongMarks[mark])
             end
         },
         vb:button {
@@ -856,14 +861,12 @@ local function showMarksDialog()
     REF = {['vb'] = vb}
     local margin = renoise.ViewBuilder.DEFAULT_CONTROL_MARGIN
     local spacing = renoise.ViewBuilder.DEFAULT_CONTROL_SPACING
-    local title
     local content
     local dialogContent
+    local title = getMarksTitle(preferences.miniwindow.value)
     if preferences.miniwindow.value then
-        title = getMarksMiniTitle()  .. '  - Unfolds -'
         dialogContent = vb:column { }
     else
-        title = "Marks v" .. MARKS_VERSION
         content = vb:column {
             id = 'content',
             margin = margin,
@@ -934,8 +937,7 @@ local function showMarksDialog()
             dialog:close()
             showMarksDialog()
         elseif char == '+' then
-            local view = renoiseView()
-            for i, v in ipairs(view) do
+            for i, v in ipairs(REF.vb.views) do
                 SongMarks[SongMarksOrder[1]][i] = v
             end
         elseif handleAZ(dialog, REF.vb.views, key) then
@@ -946,6 +948,7 @@ local function showMarksDialog()
         end
     end)
 end
+-- 1}}}
 
 renoise.tool():add_keybinding {
     name = "Global:Tools:Marks",
@@ -958,8 +961,7 @@ renoise.tool():add_menu_entry {
 }
 
 _AUTO_RELOAD_DEBUG = function()
-  -- do tests like showing a dialog, prompts whatever, or simply do nothing
-  print("XX Reload")
+  renoise.song().tool_data = '' -- marksToString(SongMarks)
   local debug = require('remdebug.engine')
   print('---- remdebug,engine')
   rprint(debug)
