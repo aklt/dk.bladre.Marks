@@ -9,6 +9,7 @@ local preferences = renoise.Document.create("MarksPreferences") {
 }
 
 local OnOffLabels         = {'on', 'off'}
+-- -- TODO 
 -- TODO Better summary
 -- TODO Show mark jumps in minified view
 -- TODO Bug: Jumping is not quite right
@@ -28,6 +29,8 @@ local SongMarksOrder = {}
 local DefaultMarks   = {}
 local DefaultMarksFileName = renoise.tool().bundle_path .. 'defaults.xml'
 local REF = {}
+
+local M = {}
 
 --
 -- {{{1 Tools
@@ -228,6 +231,7 @@ local function renoiseMarkRead()
     local selected_track_index = song.selected_track_index
     local selection = {0, 0, 0, 0, 0, 0}
     local sa = song.selection_in_pattern
+    local sp = song.selection_in_phrase
     -- TODO selection in phrase
     -- song.selection_in_phrase
     local thisTrack = song.tracks[selected_track_index]
@@ -463,9 +467,10 @@ local function renoiseMarkGoto(markName)
             if note > 0 and song.selected_note_column_index > 0 then
                 song.selected_note_column_index = note
             end
-            if effect > 0 then
-                song.selected_effect_column_index = effect
-            end
+            -- TODO show effect column
+            -- if effect > 0 then
+            --     song.selected_effect_column_index = effect
+            -- end
         end
         if mark[32] > 0 then
             song.selection_in_pattern = {
@@ -493,6 +498,7 @@ local function renoiseMarkGoto(markName)
         while i < last do
             if t then
                  local value = mark[44 + i]
+                 rprint({"Value", value})
                  if value then
                      value = not(not(value))
                  end
@@ -757,11 +763,10 @@ local function handleAZ(dialog, views, key)
       end
       saveMarks()
       if preferences.miniwindow.value then
-        REF.dialog:close()
-        showMarksDialog()
-      else
-        updateButtons(REF.vb.views, mark, DefaultMarks[mark], SongMarks[mark])
+        -- REF.dialog:close()
       end
+      M.showMarksDialog()
+      updateButtons(REF.vb.views, mark, DefaultMarks[mark], SongMarks[mark])
       return true
     elseif byte >= ('a'):byte(1) and byte <= ('z'):byte(1) then
       renoiseMarkGoto(char)
@@ -854,7 +859,7 @@ local function buildRow(ref, mark, default, song)
     return row
 end
 
-local function showMarksDialog()
+function M.showMarksDialog()
   if REF.dialog and REF.dialog.visible then
     REF.dialog:close()
   end
@@ -938,7 +943,7 @@ local function showMarksDialog()
     if char == '-' then
       preferences.miniwindow.value = not preferences.miniwindow.value
       dialog:close()
-      showMarksDialog()
+      M.showMarksDialog()
     elseif char == '+' then
       for i, v in ipairs(REF.vb.views) do
         SongMarks[SongMarksOrder[1]][i] = v
@@ -954,17 +959,17 @@ end
 
 renoise.tool():add_keybinding {
     name = "Global:Tools:Marks",
-    invoke = showMarksDialog
+    invoke = M.showMarksDialog
 }
 
 renoise.tool():add_menu_entry {
     name = "Main Menu:Tools:Marks",
-    invoke = showMarksDialog
+    invoke = M.showMarksDialog
 }
 
 _AUTO_RELOAD_DEBUG = function()
   -- TODO expose the delete marks data from song method
-  renoise.song().tool_data = '' -- marksToString(SongMarks)
+  -- renoise.song().tool_data = '' -- marksToString(SongMarks)
   local debug = require('remdebug.engine')
   print('---- remdebug,engine')
   rprint(debug)
@@ -974,5 +979,5 @@ _AUTO_RELOAD_DEBUG = function()
   oprint(renoise.song())
   print('---- renoise.tool()')
   oprint(renoise.tool())
-  showMarksDialog()
+  M.showMarksDialog()
 end
